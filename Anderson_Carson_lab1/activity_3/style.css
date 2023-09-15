@@ -33,6 +33,17 @@ body div:nth-child(3) {
 	height: 300px;
 }
 
+body div:nth-child(4) {
+	position: absolute;
+	top: 320px;
+	left: 420px;
+	border: gray solid 1px;
+	margin-bottom: 10px;
+
+	width: 400px;
+	height: 300px;
+}
+
 div svg {
 	width: 400px;
 	height: 300px;

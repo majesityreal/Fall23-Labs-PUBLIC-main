@@ -8,12 +8,19 @@ body {
 
 .letter {
     margin-bottom: 12px;
+    margin-right: 5px;
 }
 
 .letter p {
     font-size: 12px;
+    font-family: cursive;
     margin: 0 0 2px 0;
     color: #666;
+}
+
+#alphabet-container {
+    display: flex;
+    flex-wrap: wrap;
 }
 
 .bar-container {
@@ -34,4 +41,16 @@ body {
     background-color: #337ab7;
     -webkit-box-shadow: inset 0 -1px 0 rgba(0,0,0,.15);
     box-shadow: inset 0 -1px 0 rgba(0,0,0,.15);
+}
+
+.letter.high-frequency .bar {
+    background-color: #02458e;
+}
+
+.letter.mid-frequency .bar {
+    background-color: #378ac4;
+}
+
+.letter.low-frequency .bar {
+    background-color: #8ac0df;
 }

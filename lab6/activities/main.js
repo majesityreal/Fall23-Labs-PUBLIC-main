@@ -136,6 +136,23 @@ d3.csv('cars.csv', dataPreprocessor).then(function(dataset) {
         });
         console.log(cells);
 
+        var cellEnter = chartG.selectAll('.cell')
+        .data(cells)
+        .enter()
+        .append('g')
+        .attr('class', 'cell')
+        .attr("transform", function(d) {
+            // Start from the far right for columns to get a better looking chart
+            var tx = (N - d.col - 1) * cellWidth + cellPadding / 2;
+            var ty = d.row * cellHeight + cellPadding / 2;
+            return "translate("+[tx, ty]+")";
+         });
+
+         cellEnter.each(function(cell){
+            cell.init(this);
+            cell.update(this, dataset);
+        });
+
 
     });
 

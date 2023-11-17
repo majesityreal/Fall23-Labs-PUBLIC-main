@@ -63,6 +63,23 @@ d3.csv('cars.csv').then(function(data) {
      .append('g')
      .attr('transform', 'translate(' + (width + margin.left + barWidth) + ',' + margin.top + ')');
 
+    // Add brushes for both scatterplot and bar chart
+    var scatterplotBrush = d3.brush()
+    .extent([[0, 0], [width, height]])
+    .on('start brush end', updateBrush);
+
+    var barChartBrush = d3.brushX()
+    .extent([[0, 0], [width, height]])
+    .on('start brush end', updateBrush);
+
+    scatterplotSvg.append('g')
+    .attr('class', 'brush')
+    .call(scatterplotBrush);
+
+    barChartSvg.append('g')
+    .attr('class', 'brush')
+    .call(barChartBrush);
+
     // Initialize scatterplot and bar chart
     updateScatterplot();
     updateBarChart();
@@ -117,7 +134,7 @@ d3.csv('cars.csv').then(function(data) {
     function updateBarChart() {
         // Update scales
         xBarScale.domain(data.map(function(d) { return d.cylinders; }));
-        yBarScale.domain([0, d3.max(data, function(d) { return d3.max(data, function(d) { return d.cylinders; }); })]);
+        yBarScale.domain([0, d3.max(data, function(d) { return d3.max(data, function(d) { return d['power (hp)']; }); })]);
 
         // Update axes
         barChartSvg.select('.x-axis-bar').remove();
@@ -147,5 +164,47 @@ d3.csv('cars.csv').then(function(data) {
             .attr('fill', 'steelblue');
 
         bars.exit().remove();
+    }
+
+    // Function to update brushes
+    function updateBrush(event) {
+        // Get the selected range
+        var selectedRange = event.selection;
+
+        // Update scatterplot circles based on the selected range
+        var selectedDataScatterplot = [];
+        if (selectedRange) {
+            selectedDataScatterplot = data.filter(function(d) {
+                return (
+                    d[xAttribute] >= xScale.invert(selectedRange[0][0]) &&
+                    d[xAttribute] <= xScale.invert(selectedRange[1][0]) &&
+                    d[yAttribute] >= yScale.invert(selectedRange[1][1]) &&
+                    d[yAttribute] <= yScale.invert(selectedRange[0][1])
+                );
+            });
+        }
+
+        // Update bar chart bars based on the selected range
+        var selectedDataBarChart = [];
+        if (selectedRange) {
+            selectedDataBarChart = data.filter(function(d) {
+                return (
+                    d.cylinders >= xBarScale.invert(selectedRange[0][0]) &&
+                    d.cylinders <= xBarScale.invert(selectedRange[1][0])
+                );
+            });
+        }
+
+        // Update scatterplot
+        scatterplotSvg.selectAll('circle')
+            .classed('highlighted', function(d) {
+                return selectedDataScatterplot.indexOf(d) !== -1;
+            });
+
+        // Update bar chart
+        barChartSvg.selectAll('.bar')
+            .classed('highlighted', function(d) {
+                return selectedDataBarChart.indexOf(d) !== -1;
+            });
     }
 });

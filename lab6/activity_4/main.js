@@ -64,21 +64,19 @@ d3.csv('cars.csv').then(function(data) {
      .attr('transform', 'translate(' + (width + margin.left + barWidth) + ',' + margin.top + ')');
 
     // Add brushes for both scatterplot and bar chart
-    var scatterplotBrush = d3.brush()
+    var brush = d3.brush()
     .extent([[0, 0], [width, height]])
-    .on('start brush end', updateBrush);
-
-    var barChartBrush = d3.brushX()
-    .extent([[0, 0], [width, height]])
-    .on('start brush end', updateBrush);
+    .on("start", brushstart)
+    .on("brush", brushmove)
+    .on("end", brushend);
 
     scatterplotSvg.append('g')
     .attr('class', 'brush')
-    .call(scatterplotBrush);
+    .call(brush);
 
     barChartSvg.append('g')
     .attr('class', 'brush')
-    .call(barChartBrush);
+    .call(brush);
 
     // Initialize scatterplot and bar chart
     updateScatterplot();
@@ -94,6 +92,7 @@ d3.csv('cars.csv').then(function(data) {
     d3.select('#y-axis-select').on('change', function() {
         yAttribute = this.value;
         updateScatterplot();
+        updateBarChart();
     });
 
     // Function to update scatterplot
@@ -132,38 +131,78 @@ d3.csv('cars.csv').then(function(data) {
 
     // Function to update bar chart
     function updateBarChart() {
-        // Update scales
-        xBarScale.domain(data.map(function(d) { return d.cylinders; }));
-        yBarScale.domain([0, d3.max(data, function(d) { return d3.max(data, function(d) { return d['power (hp)']; }); })]);
+        // // Update scales
+        // xBarScale.domain(data.map(function(d) { return d.cylinders; }));
+        // yBarScale.domain([0, d3.max(Array.from(cylindersCount.values()))]);
 
-        // Update axes
-        barChartSvg.select('.x-axis-bar').remove();
-        barChartSvg.select('.y-axis-bar').remove();
+        // // Update axes
+        // barChartSvg.select('.x-axis-bar').remove();
+        // barChartSvg.select('.y-axis-bar').remove();
 
-        barChartSvg.append('g')
-            .attr('class', 'x-axis-bar')
-            .attr('transform', 'translate(' + (width + barWidth) + ',' + height + ')')
-            .call(xAxisBar);
+        // barChartSvg.append('g')
+        //     .attr('class', 'x-axis-bar')
+        //     .attr('transform', 'translate(' + (width + barWidth) + ',' + height + ')')
+        //     .call(xAxisBar);
 
-            barChartSvg.append('g')
-            .attr('class', 'y-axis-bar')
-            .call(yAxisBar);
+        //     barChartSvg.append('g')
+        //     .attr('class', 'y-axis-bar')
+        //     .call(yAxisBar);
 
-        // Update bars
-        var bars = barChartSvg.selectAll('.bar')
-            .data(data);
+        // // Update bars
+        // var bars = barChartSvg.selectAll('.bar')
+        //     .data(data);
 
-        bars.enter()
-            .append('rect')
-            .attr('class', 'bar')
-            .merge(bars)
-            .attr('x', function(d) { return xBarScale(d.cylinders); })
-            .attr('y', function(d) { return yBarScale(d.cylinders); })
-            .attr('width', xBarScale.bandwidth())
-            .attr('height', function(d) { return height - yBarScale(d.cylinders); })
-            .attr('fill', 'steelblue');
+        // bars.enter()
+        //     .append('rect')
+        //     .attr('class', 'bar')
+        //     .merge(bars)
+        //     .attr('x', function(d) { return xBarScale(d.cylinders); })
+        //     .attr('y', function(d) { return yBarScale(d['power (hp)']); })
+        //     .attr('width', xBarScale.bandwidth())
+        //     .attr('height', function(d) { return height - yBarScale(d['power (hp)']); })
+        //     .attr('fill', 'steelblue');
 
-        bars.exit().remove();
+        // bars.exit().remove();
+
+    // Sort data by cylinders in ascending order
+    data.sort(function(a, b) {
+        return a.cylinders - b.cylinders;
+    });
+
+    var cylindersCount = d3.rollup(data, v => v.length, d => d.cylinders);
+
+            // Update scales
+    xBarScale.domain(Array.from(cylindersCount.keys()));
+    yBarScale.domain([0, d3.max(Array.from(cylindersCount.values()))]);
+
+    // Update axes
+    barChartSvg.select('.x-axis-bar').remove();
+    barChartSvg.select('.y-axis-bar').remove();
+
+    barChartSvg.append('g')
+        .attr('class', 'x-axis-bar')
+        .attr('transform', 'translate(0,' + height + ')')
+        .call(xAxisBar);
+
+    barChartSvg.append('g')
+        .attr('class', 'y-axis-bar')
+        .call(yAxisBar);
+
+    // Update bars
+    var bars = barChartSvg.selectAll('.bar')
+        .data(Array.from(cylindersCount.entries()), d => d[0]);
+
+    bars.enter()
+        .append('rect')
+        .attr('class', 'bar')
+        .merge(bars)
+        .attr('x', function(d) { return xBarScale(d[0]); })
+        .attr('y', function(d) { return yBarScale(d[1]); })
+        .attr('width', xBarScale.bandwidth())
+        .attr('height', function(d) { return height - yBarScale(d[1]); })
+        .attr('fill', 'steelblue');
+
+    bars.exit().remove();
     }
 
     // Function to update brushes
@@ -208,3 +247,49 @@ d3.csv('cars.csv').then(function(data) {
             });
     }
 });
+
+// ********* Your event listener functions go here *********//
+function brushstart(event, cell) {
+    // cell is the SplomCell object
+
+    // Check if this g element is different than the previous brush
+    if(brushCell !== this) {
+
+        // Clear the old brush
+        brush.move(d3.select(brushCell), null);
+
+        // Update the global scales for the subsequent brushmove events
+        xScale.domain(extentByAttribute[cell.x]);
+        yScale.domain(extentByAttribute[cell.y]);
+
+        // Save the state of this g element as having an active brush
+        brushCell = this;
+    }
+}
+
+function brushmove(event, cell) {
+    // cell is the SplomCell object
+
+    // Get the extent or bounding box of the brush event, this is a 2x2 array
+    var e = event.selection;
+    if(e) {
+
+        // Select all .dot circles, and add the "hidden" class if the data for that circle
+        // lies outside of the brush-filter applied for this SplomCells x and y attributes
+        svg.selectAll(".dot")
+            .classed("hidden", function(d){
+                return e[0][0] > xScale(d[cell.x]) || xScale(d[cell.x]) > e[1][0]
+                    || e[0][1] > yScale(d[cell.y]) || yScale(d[cell.y]) > e[1][1];
+            })
+    }
+}
+
+function brushend(event) {
+    // If there is no longer an extent or bounding box then the brush has been removed
+    if(!event.selection) {
+        // Bring back all hidden .dot elements
+        svg.selectAll('.hidden').classed('hidden', false);
+        // Return the state of the active brushCell to be undefined
+        brushCell = undefined;
+    }
+}

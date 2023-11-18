@@ -1,3 +1,57 @@
+var svg = d3.select('svg');
+
+// Get layout parameters
+var svgWidth = +svg.attr('width');
+var svgHeight = +svg.attr('height');
+
+var padding = {t: 40, r: 40, b: 40, l: 40};
+var cellPadding = 10;
+
+// Create a group element for appending chart elements
+var chartG = svg.append('g')
+    .attr('transform', 'translate('+[padding.l, padding.t]+')');
+
+var dataAttributes = ['power (hp)', 'cylinders', 'economy (mpg)', '0-60 mph (s)'];
+var N = dataAttributes.length;
+
+// Compute chart dimensions
+var cellWidth = (svgWidth - padding.l - padding.r) / N;
+var cellHeight = (svgHeight - padding.t - padding.b) / N;
+
+// Global x and y scales to be used for all SplomCells
+var xScale = d3.scaleLinear().range([0, cellWidth - cellPadding]);
+var yScale = d3.scaleLinear().range([cellHeight - cellPadding, 0]);
+// axes that are rendered already for you
+var xAxis = d3.axisTop(xScale).ticks(6).tickSize(-cellHeight * N, 0, 0);
+var yAxis = d3.axisLeft(yScale).ticks(6).tickSize(-cellWidth * N, 0, 0);
+// Ordinal color scale for cylinders color mapping
+var customColors = ['#ff5733', '#ffbd69', '#45aaf2', '#2ecc71','#8e44ad','#f7dc6f', '#3498db', '#fd79a8', '#1abc9c', '#f39c12' ];
+var colorScale = d3.scaleOrdinal(customColors);
+// Map for referencing min/max per each attribute
+var extentByAttribute = {};
+// Object for keeping state of which cell is currently being brushed
+var brushCell;
+
+var brush = d3.brush()
+    .extent([[0, 0], [cellWidth - cellPadding, cellHeight - cellPadding]])
+    .on("start", brushstart)
+    .on("brush", brushmove)
+    .on("end", brushend);
+
+var toolTip = d3.tip()
+    .attr("class", "d3-tip")
+    .offset([-12, 0])
+    .html(function(event, d) {
+        // Inject html, when creating your html I recommend editing the html within your index.html first
+        return "<h5>"+d['name']+"</h5><table><thead><tr><td>Year</td><td>Displacement (cc)</td><td>Weight (lb)</td></tr></thead>"
+                + "<tbody><tr><td>"+d['year']+"</td><td>"+d['displacement (cc)']+"</td><td>"+d['weight (lb)']+"</td></tr></tbody>"
+                + "<thead><tr><td>0-60 mph (s)</td><td>Economy (mpg)</td><td>Cylinders</td><td>Power (hp)</td></tr></thead>"
+                + "<tbody><tr><td>"+d['0-60 mph (s)']+"</td><td>"+d['economy (mpg)']+"</td><td>"+d['cylinders']+"</td><td>"+d['power (hp)']+"</td></tr></tbody></table>"
+    });
+
+svg.call(toolTip);
+
+// ****** Add reusable components here ****** //
 function SplomCell(x, y, col, row) {
     this.x = x;
     this.y = y;
@@ -55,255 +109,76 @@ SplomCell.prototype.update = function(g, data) {
     dots.exit().remove();
 }
 
-// Load the data
-d3.csv('cars.csv').then(function(data) {
-    // Convert string values to numbers
-    data.forEach(function(d) {
-        d.cylinders = +d.cylinders;
-        d['power (hp)'] = +d['power (hp)'];
-    });
 
-    // Set up initial attributes for scatterplot
-    var xAttribute = 'cylinders';
-    var yAttribute = 'power (hp)';
+d3.csv('cars.csv', dataPreprocessor).then(function(dataset) {
+    
+        cars = dataset;
 
-    // Create dropdown options
-    var attributeOptions = ['cylinders', 'power (hp)'];
+        // Create map for each attribute's extent
+        dataAttributes.forEach(function(attribute){
+            extentByAttribute[attribute] = d3.extent(dataset, function(d){
+                return d[attribute];
+            });
+        });
 
-    // Create X and Y dropdowns
-    d3.select('#x-axis-select')
-        .selectAll('option')
-        .data(attributeOptions)
+        // Pre-render gridlines and labels
+        chartG.selectAll('.x.axis')
+            .data(dataAttributes)
+            .enter()
+            .append('g')
+            .attr('class', 'x axis')
+            .attr('transform', function(d,i) {
+                return 'translate('+[(N - i - 1) * cellWidth + cellPadding / 2, 0]+')';
+            })
+            .each(function(attribute){
+                xScale.domain(extentByAttribute[attribute]);
+                d3.select(this).call(xAxis);
+                d3.select(this).append('text')
+                    .text(attribute)
+                    .attr('class', 'axis-label')
+                    .attr('transform', 'translate('+[cellWidth / 2, -20]+')');
+            });
+        chartG.selectAll('.y.axis')
+            .data(dataAttributes)
+            .enter()
+            .append('g')
+            .attr('class', 'y axis')
+            .attr('transform', function(d,i) {
+                return 'translate('+[0, i * cellHeight + cellPadding / 2]+')';
+            })
+            .each(function(attribute){
+                yScale.domain(extentByAttribute[attribute]);
+                d3.select(this).call(yAxis);
+                d3.select(this).append('text')
+                    .text(attribute)
+                    .attr('class', 'axis-label')
+                    .attr('transform', 'translate('+[-26, cellHeight / 2]+')rotate(270)');
+            });
+
+
+        // ********* Your data dependent code goes here *********//
+        var cellEnter = chartG.selectAll('.cell')
+        .data(cells)
         .enter()
-        .append('option')
-        .attr('value', function(d) { return d; })
-        .text(function(d) { return d; });
+        .append('g')
+        .attr('class', 'cell')
+        .attr("transform", function(d) {
+            // Start from the far right for columns to get a better looking chart
+            var tx = (N - d.col - 1) * cellWidth + cellPadding / 2;
+            var ty = d.row * cellHeight + cellPadding / 2;
+            return "translate("+[tx, ty]+")";
+         });
 
-    d3.select('#y-axis-select')
-        .selectAll('option')
-        .data(attributeOptions)
-        .enter()
-        .append('option')
-        .attr('value', function(d) { return d; })
-        .text(function(d) { return d; });
+         cellEnter.append('g')
+         .attr('class', 'brush')
+         .call(brush);
 
-    // Set up scales and axes for scatterplot
-    var margin = { top: 20, right: 20, bottom: 40, left: 40 };
-    var width = 400 - margin.left - margin.right;
-    var height = 400 - margin.top - margin.bottom;
+         cellEnter.each(function(cell){
+            cell.init(this);
+            cell.update(this, dataset);
+        });
 
-    var xScale = d3.scaleLinear().range([0, width]);
-    var yScale = d3.scaleLinear().range([height, 0]);
-
-    var xAxis = d3.axisBottom(xScale);
-    var yAxis = d3.axisLeft(yScale);
-
-    // Set up scales and axes for bar chart
-    var barWidth = 30;
-
-    var xBarScale = d3.scaleBand().range([0, width]).padding(0.1);
-    var yBarScale = d3.scaleLinear().range([height, 0]);
-
-    var xAxisBar = d3.axisBottom(xBarScale);
-    var yAxisBar = d3.axisLeft(yBarScale);
-
-     // Create SVG containers for scatterplot and bar chart
-     var scatterplotSvg = d3.select('#chart-svg')
-     .attr('width', width * 2 + margin.left + margin.right)
-     .attr('height', height + margin.top + margin.bottom)
-     .append('g')
-     .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
-
-    var barChartSvg = d3.select('#chart-svg')
-    .attr('width', width * 2 + margin.left + margin.right)
-    .attr('height', height + margin.top + margin.bottom)
-     .append('g')
-     .attr('transform', 'translate(' + (width + margin.left + barWidth) + ',' + margin.top + ')');
-
-    // Add brushes for both scatterplot and bar chart
-    var brush = d3.brush()
-    .extent([[0, 0], [width, height]])
-    .on("start", brushstart)
-    .on("brush", brushmove)
-    .on("end", brushend);
-
-    scatterplotSvg.append('g')
-    .attr('class', 'brush')
-    .call(brush);
-
-    barChartSvg.append('g')
-    .attr('class', 'brush')
-    .call(brush);
-
-    // Initialize scatterplot and bar chart
-    updateScatterplot();
-    updateBarChart();
-
-    // Event listeners for dropdown changes
-    d3.select('#x-axis-select').on('change', function() {
-        xAttribute = this.value;
-        updateScatterplot();
-        updateBarChart();
     });
-
-    d3.select('#y-axis-select').on('change', function() {
-        yAttribute = this.value;
-        updateScatterplot();
-        updateBarChart();
-    });
-
-    // Function to update scatterplot
-    function updateScatterplot() {
-        // Update scales
-        xScale.domain(d3.extent(data, function(d) { return d[xAttribute]; }));
-        yScale.domain(d3.extent(data, function(d) { return d[yAttribute]; }));
-
-        // Update axes
-        scatterplotSvg.select('.x-axis').remove();
-        scatterplotSvg.select('.y-axis').remove();
-
-        scatterplotSvg.append('g')
-            .attr('class', 'x-axis')
-            .attr('transform', 'translate(0,' + height + ')')
-            .call(xAxis);
-
-            scatterplotSvg.append('g')
-            .attr('class', 'y-axis')
-            .call(yAxis);
-
-        // Update circles
-        var circles = scatterplotSvg.selectAll('circle')
-            .data(data);
-
-        circles.enter()
-            .append('circle')
-            .attr('r', 5)
-            .merge(circles)
-            .attr('cx', function(d) { return xScale(d[xAttribute]); })
-            .attr('cy', function(d) { return yScale(d[yAttribute]); })
-            .attr('fill', 'steelblue');
-
-        circles.exit().remove();
-    }
-
-    // Function to update bar chart
-    function updateBarChart() {
-        // // Update scales
-        // xBarScale.domain(data.map(function(d) { return d.cylinders; }));
-        // yBarScale.domain([0, d3.max(Array.from(cylindersCount.values()))]);
-
-        // // Update axes
-        // barChartSvg.select('.x-axis-bar').remove();
-        // barChartSvg.select('.y-axis-bar').remove();
-
-        // barChartSvg.append('g')
-        //     .attr('class', 'x-axis-bar')
-        //     .attr('transform', 'translate(' + (width + barWidth) + ',' + height + ')')
-        //     .call(xAxisBar);
-
-        //     barChartSvg.append('g')
-        //     .attr('class', 'y-axis-bar')
-        //     .call(yAxisBar);
-
-        // // Update bars
-        // var bars = barChartSvg.selectAll('.bar')
-        //     .data(data);
-
-        // bars.enter()
-        //     .append('rect')
-        //     .attr('class', 'bar')
-        //     .merge(bars)
-        //     .attr('x', function(d) { return xBarScale(d.cylinders); })
-        //     .attr('y', function(d) { return yBarScale(d['power (hp)']); })
-        //     .attr('width', xBarScale.bandwidth())
-        //     .attr('height', function(d) { return height - yBarScale(d['power (hp)']); })
-        //     .attr('fill', 'steelblue');
-
-        // bars.exit().remove();
-
-    // Sort data by cylinders in ascending order
-    data.sort(function(a, b) {
-        return a.cylinders - b.cylinders;
-    });
-
-    var cylindersCount = d3.rollup(data, v => v.length, d => d.cylinders);
-
-            // Update scales
-    xBarScale.domain(Array.from(cylindersCount.keys()));
-    yBarScale.domain([0, d3.max(Array.from(cylindersCount.values()))]);
-
-    // Update axes
-    barChartSvg.select('.x-axis-bar').remove();
-    barChartSvg.select('.y-axis-bar').remove();
-
-    barChartSvg.append('g')
-        .attr('class', 'x-axis-bar')
-        .attr('transform', 'translate(0,' + height + ')')
-        .call(xAxisBar);
-
-    barChartSvg.append('g')
-        .attr('class', 'y-axis-bar')
-        .call(yAxisBar);
-
-    // Update bars
-    var bars = barChartSvg.selectAll('.bar')
-        .data(Array.from(cylindersCount.entries()), d => d[0]);
-
-    bars.enter()
-        .append('rect')
-        .attr('class', 'bar')
-        .merge(bars)
-        .attr('x', function(d) { return xBarScale(d[0]); })
-        .attr('y', function(d) { return yBarScale(d[1]); })
-        .attr('width', xBarScale.bandwidth())
-        .attr('height', function(d) { return height - yBarScale(d[1]); })
-        .attr('fill', 'steelblue');
-
-    bars.exit().remove();
-    }
-
-    // Function to update brushes
-    function updateBrush(event) {
-        // Get the selected range
-        var selectedRange = event.selection;
-
-        // Update scatterplot circles based on the selected range
-        var selectedDataScatterplot = [];
-        if (selectedRange) {
-            selectedDataScatterplot = data.filter(function(d) {
-                return (
-                    d[xAttribute] >= xScale.invert(selectedRange[0][0]) &&
-                    d[xAttribute] <= xScale.invert(selectedRange[1][0]) &&
-                    d[yAttribute] >= yScale.invert(selectedRange[1][1]) &&
-                    d[yAttribute] <= yScale.invert(selectedRange[0][1])
-                );
-            });
-        }
-
-        // Update bar chart bars based on the selected range
-        var selectedDataBarChart = [];
-        if (selectedRange) {
-            selectedDataBarChart = data.filter(function(d) {
-                return (
-                    d.cylinders >= xBarScale.invert(selectedRange[0][0]) &&
-                    d.cylinders <= xBarScale.invert(selectedRange[1][0])
-                );
-            });
-        }
-
-        // Update scatterplot
-        scatterplotSvg.selectAll('circle')
-            .classed('highlighted', function(d) {
-                return selectedDataScatterplot.indexOf(d) !== -1;
-            });
-
-        // Update bar chart
-        barChartSvg.selectAll('.bar')
-            .classed('highlighted', function(d) {
-                return selectedDataBarChart.indexOf(d) !== -1;
-            });
-    }
-});
 
 // ********* Your event listener functions go here *********//
 function brushstart(event, cell) {
@@ -338,17 +213,6 @@ function brushmove(event, cell) {
                 return e[0][0] > xScale(d[cell.x]) || xScale(d[cell.x]) > e[1][0]
                     || e[0][1] > yScale(d[cell.y]) || yScale(d[cell.y]) > e[1][1];
             })
-
-            scatterplotSvg.selectAll('circle')
-        .classed('highlighted', function(d) {
-            return (
-                selectedRange &&
-                d[xAttribute] >= xScale.invert(selectedRange[0][0]) &&
-                d[xAttribute] <= xScale.invert(selectedRange[1][0]) &&
-                d[yAttribute] >= yScale.invert(selectedRange[1][1]) &&
-                d[yAttribute] <= yScale.invert(selectedRange[0][1])
-            );
-        });
     }
 }
 
@@ -360,4 +224,19 @@ function brushend(event) {
         // Return the state of the active brushCell to be undefined
         brushCell = undefined;
     }
+}
+
+// Remember code outside of the data callback function will run before the data loads
+
+function dataPreprocessor(row) {
+    return {
+        'name': row['name'],
+        'economy (mpg)': +row['economy (mpg)'],
+        'cylinders': +row['cylinders'],
+        'displacement (cc)': +row['displacement (cc)'],
+        'power (hp)': +row['power (hp)'],
+        'weight (lb)': +row['weight (lb)'],
+        '0-60 mph (s)': +row['0-60 mph (s)'],
+        'year': +row['year']
+    };
 }

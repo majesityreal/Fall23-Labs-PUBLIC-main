@@ -1,3 +1,60 @@
+function SplomCell(x, y, col, row) {
+    this.x = x;
+    this.y = y;
+    this.col = col;
+    this.row = row;
+}
+
+var cells = [];
+dataAttributes.forEach(function(attrX, col){
+    dataAttributes.forEach(function(attrY, row){
+        cells.push(new SplomCell(attrX, attrY, col, row));
+    });
+});
+
+SplomCell.prototype.init = function(g) {
+    var cell = d3.select(g);
+
+    cell.append('rect')
+        .attr('class', 'frame')
+        .attr('width', cellWidth - cellPadding)
+        .attr('height', cellHeight - cellPadding)
+}
+
+SplomCell.prototype.update = function(g, data) {
+    var cell = d3.select(g);
+
+    // Update the global x,yScale objects for this cell's x,y attribute domains
+    xScale.domain(extentByAttribute[this.x]);
+    yScale.domain(extentByAttribute[this.y]);
+
+    // Save a reference of this SplomCell, to use within anon function scopes
+    var _this = this;
+
+    var dots = cell.selectAll('.dot')
+        .data(data, function(d){
+            return d.name +'-'+d.year+'-'+d.cylinders; // Create a unique id for the car
+        });
+
+    var dotsEnter = dots.enter()
+        .append('circle')
+        .attr('class', 'dot')
+        .style("fill", function(d) { return colorScale(d.cylinders); })
+        .attr('r', 4);
+
+    dotsEnter.on('mouseover', toolTip.show)
+    .on('mouseout', toolTip.hide);
+
+    dots.merge(dotsEnter).attr('cx', function(d){
+            return xScale(d[_this.x]);
+        })
+        .attr('cy', function(d){
+            return yScale(d[_this.y]);
+        });
+
+    dots.exit().remove();
+}
+
 // Load the data
 d3.csv('cars.csv').then(function(data) {
     // Convert string values to numbers
@@ -281,6 +338,17 @@ function brushmove(event, cell) {
                 return e[0][0] > xScale(d[cell.x]) || xScale(d[cell.x]) > e[1][0]
                     || e[0][1] > yScale(d[cell.y]) || yScale(d[cell.y]) > e[1][1];
             })
+
+            scatterplotSvg.selectAll('circle')
+        .classed('highlighted', function(d) {
+            return (
+                selectedRange &&
+                d[xAttribute] >= xScale.invert(selectedRange[0][0]) &&
+                d[xAttribute] <= xScale.invert(selectedRange[1][0]) &&
+                d[yAttribute] >= yScale.invert(selectedRange[1][1]) &&
+                d[yAttribute] <= yScale.invert(selectedRange[0][1])
+            );
+        });
     }
 }
 

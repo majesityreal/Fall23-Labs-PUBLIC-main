@@ -32,6 +32,11 @@ circle.hidden {
   fill-opacity: .2;
 }
 
+rect.bar.hidden {
+  fill: #ccc !important;
+  fill-opacity: .2;
+}
+
 circle:hover {
   fill: #111 !important;
   fill-opacity: 1;
